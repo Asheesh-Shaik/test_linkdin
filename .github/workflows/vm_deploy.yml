@@ -1,0 +1,56 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main  # Adjust this if you are using a different branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: SSH to Azure VM and deploy
+        uses: appleboy/ssh-action@v0.1.4
+        with:
+          host: 20.205.26.179
+          username: test-dev  # e.g., azureuser
+          password: ${{ secrets.AZURE_PASSWORD }}  # Store your password in secrets
+          script: |
+            # Change to the application directory or create it if it doesn't exist
+            if [ ! -d "test_linkdin" ]; then
+              git clone https://github.com/Asheesh-Shaik/test_linkdin.git
+            fi
+            cd test_linkdin
+            
+            # Pull the latest changes from the repository
+            git pull origin master  # Adjust branch name if necessary
+            
+            # Check if the port is already in use using pgrep
+            if pgrep -f "streamlit" > /dev/null; then
+              echo "Port 8501 is already in use. Stopping the conflicting service..."
+              # Stop the process using the port
+              PID=$(sudo -S lsof -ti:8501 <<< "${{ secrets.AZURE_PASSWORD }}")
+              sudo -S kill -9 $PID <<< "${{ secrets.AZURE_PASSWORD }}" || true
+            fi
+            
+            # Check if the container exists and stop/remove it
+            if sudo -S docker ps -aq -f name=my-streamlit-app <<< "${{ secrets.AZURE_PASSWORD }}"; then
+              echo "Stopping and removing existing container..."
+              sudo -S docker stop my-streamlit-app <<< "${{ secrets.AZURE_PASSWORD }}" || true
+              sudo -S docker rm my-streamlit-app <<< "${{ secrets.AZURE_PASSWORD }}" || true
+            else
+              echo "No existing container to stop."
+            fi
+            
+            # Ensure the Docker daemon is running
+            sudo -S service docker start <<< "${{ secrets.AZURE_PASSWORD }}"
+            
+            # Build the Docker image
+            sudo -S docker build -t my-streamlit-app . <<< "${{ secrets.AZURE_PASSWORD }}"
+            
+            # Run the new container
+            sudo -S docker run -d --name my-streamlit-app -p 8501:8501 my-streamlit-app || { echo "Failed to start container"; exit 1; }
