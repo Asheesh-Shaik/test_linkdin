@@ -27,7 +27,7 @@ jobs:
             cd test_linkdin
             
             # Pull the latest changes from the repository
-            git pull origin main  # Adjust branch name if necessary
+            git pull origin main  ## Adjust branch name if necessary
             
             # Check if the port is already in use using pgrep
             if pgrep -f "streamlit" > /dev/null; then
